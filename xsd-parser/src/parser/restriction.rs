@@ -57,7 +57,41 @@ fn simple_type_restriction(node: &Node) -> RsEntity {
 }
 
 fn simple_content_restriction(node: &Node) -> RsEntity {
-    unimplemented!("\n{:?}\n", node)
+    let base = get_base(node);
+    let mut fields = attributes_to_fields(node);
+
+    fields.push(StructField {
+        name: tag::BASE.to_string(),
+        type_name: base.to_string(),
+        comment: get_documentation(node),
+        source: StructFieldSource::Base,
+        ..Default::default()
+    });
+
+    let content = node
+        .children()
+        .filter(|n| {
+            n.is_element()
+                && n.xsd_type() != ElementType::Attribute
+                && AVAILABLE_CONTENT_TYPES.contains(&n.xsd_type())
+        })
+        .last();
+
+    if let Some(cont) = content {
+        let mut res = parse_node(&cont, node);
+        if let RsEntity::Struct(s) = &mut res {
+            s.comment = get_documentation(node);
+            s.fields.borrow_mut().append(&mut fields);
+            return res;
+        }
+    }
+
+    RsEntity::Struct(Struct {
+        comment: get_documentation(node),
+        fields: RefCell::new(fields),
+        attribute_groups: RefCell::new(attribute_groups_to_aliases(node)),
+        ..Default::default()
+    })
 }
 
 // NOTE: current implementation works for types from ONVIF, but might not work
